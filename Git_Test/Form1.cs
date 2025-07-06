@@ -27,14 +27,25 @@ namespace Git_Test
 
         private void button1_Click(object sender, EventArgs e)
         {
-            string newRepoPath = Repository.Init(@"C:\Users\massa\Documents\Test");
+            string newRepoPath = Repository.Init(txtRipoPath.Text);
+            using (var repo = new Repository(txtRipoPath.Text))
+            {
+                Commands.Stage(repo, "*"); // 全てのファイルをステージング
+                                           // コミット情報を作成
+                Signature author = new Signature("sakai", "@jugglingnutcase", DateTime.Now);
+                Signature committer = author;
+
+                // リポジトリにコミットを実施
+                Commit commit = repo.Commit("初回打上", author, committer);
+            }
+            ;
 
             MessageBox.Show(newRepoPath);
         }
 
         private void button2_Click(object sender, EventArgs e)
         {
-            string gitPath = @"C:\Users\massa\Documents\Test";
+            string gitPath = txtRipoPath.Text;
             string strComment = txtChangeContent.Text;
             if (strComment.Length < 3)
             {
@@ -49,17 +60,78 @@ namespace Git_Test
                 //var content = "Commit this!";
                 //File.WriteAllText(Path.Combine(repo.Info.WorkingDirectory, gitPath + @"\fileToCommit.txt"), content);
 
-                // ファイルをステージングする(対象ファイルを選ぶ)
-                repo.Index.Add("fileToCommit.txt");
-                repo.Index.Add("Git_test.txt");
-                repo.Index.Write();
+                // 変更されたファイルを全て取得
+                var changes = repo.Diff.Compare<TreeChanges>(repo.Head.Tip.Tree, DiffTargets.WorkingDirectory);
 
-                // コミット情報を作成
-                Signature author = new Signature("sakai", "@jugglingnutcase", DateTime.Now);
-                Signature committer = author;
+                if (changes.Count > 0)
+                {
+                    // 変更ファイルをすべてステージング
+                    foreach (var change in changes)
+                    {
+                        repo.Index.Add(change.Path);
+                    }
+                    repo.Index.Write();
 
-                // リポジトリにコミットを実施
-                Commit commit = repo.Commit(strComment, author, committer);
+                    // コミット情報を作成
+                    Signature author = new Signature("sakai", "@jugglingnutcase", DateTime.Now);
+                    Signature committer = author;
+
+                    // リポジトリにコミットを実施
+                    Commit commit = repo.Commit(strComment, author, committer);
+                } else
+                {
+                    MessageBox.Show("変更されたファイルがありません");
+                }
+            }
+        }
+
+        private void btnHistoryRead_Click(object sender, EventArgs e)
+        {
+            string ripoPath = txtRipoPath.Text;
+            // 修正: using 宣言を通常の using ステートメントに変更
+            using (var repo = new Repository(ripoPath))
+            {
+                // リストボックスにコミット履歴を表示
+                lstHistory.Items.Clear();
+                // リポジトリのコミット履歴を取得
+                foreach (Commit commit in repo.Commits)
+                {
+                    lstHistory.Items.Add($"Commit_Id:{commit.Sha} - {commit.MessageShort},{commit.Author.Name}<{commit.Author.Email}>,Date:{commit.Author.When}, Message:{commit.Message}");
+                }
+            }
+        }
+
+        private void btnBlobGet_Click(object sender, EventArgs e)
+        {
+            if (lstHistory.SelectedItem == null)
+            {
+                MessageBox.Show("コミットを選択してください");
+                return;
+            }
+
+            using(var repo = new Repository(txtRipoPath.Text))
+            {
+                // 選択されたコミットのSHAを取得
+                string selectedCommit = lstHistory.SelectedItem.ToString();
+                string commitSha = selectedCommit.Split('-')[0].Replace("Commit_Id:", "").Trim();
+                // コミットからBlobを取得
+                Commit commit = repo.Lookup<Commit>(commitSha);
+                if (commit != null)
+                {
+                    foreach (var entry in commit.Tree)
+                    {
+                        if (entry.TargetType == TreeEntryTargetType.Blob)
+                        {
+                            Blob blob = (Blob)entry.Target;
+                            string content = blob.GetContentText();
+                            MessageBox.Show($"ファイル名：{entry.Name} \r\nBlob Content:\n{content}");
+                        }
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("選択されたコミットが見つかりません");
+                }
             }
         }
     }
