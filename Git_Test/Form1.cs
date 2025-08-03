@@ -1,14 +1,16 @@
-﻿using System;
+﻿using LibGit2Sharp;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.SqlClient;
 using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using LibGit2Sharp;
+using System.Xml;
 
 
 namespace Git_Test
@@ -22,7 +24,18 @@ namespace Git_Test
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            // ListViewのViewをDetailsに設定
+            listViewHistory.View = View.Details;
 
+            // カラムが未追加の場合のみ追加
+            if (listViewHistory.Columns.Count == 0)
+            {
+                listViewHistory.Columns.Add("CommitID", 120);
+                listViewHistory.Columns.Add("DAY", 80);
+                listViewHistory.Columns.Add("TrackingNumber", 120);
+                listViewHistory.Columns.Add("SubNo", 80);
+                listViewHistory.Columns.Add("Result", 120);
+            }
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -87,23 +100,53 @@ namespace Git_Test
 
         private void btnHistoryRead_Click(object sender, EventArgs e)
         {
-            string ripoPath = txtRipoPath.Text;
-            // 修正: using 宣言を通常の using ステートメントに変更
-            using (var repo = new Repository(ripoPath))
+            //string ripoPath = txtRipoPath.Text;
+            //// 修正: using 宣言を通常の using ステートメントに変更
+            //using (var repo = new Repository(ripoPath))
+            //{
+            //    // リストボックスにコミット履歴を表示
+            //    lstHistory.Items.Clear();
+            //    // リポジトリのコミット履歴を取得
+            //    foreach (Commit commit in repo.Commits)
+            //    {
+            //        lstHistory.Items.Add($"Commit_Id:{commit.Sha} - {commit.MessageShort},{commit.Author.Name}<{commit.Author.Email}>,Date:{commit.Author.When}, Message:{commit.Message}");
+            //    }
+            //}
+            clsGit clsGit = new clsGit();
+            clsGit.RipositoryPath = txtRipoPath.Text;
+            bool flg = clsGit.RepositoryList_Get();
+            if (flg)
             {
-                // リストボックスにコミット履歴を表示
-                lstHistory.Items.Clear();
-                // リポジトリのコミット履歴を取得
-                foreach (Commit commit in repo.Commits)
+                listViewHistory.Items.Clear();
+
+                // DAYが文字列の場合はDateTimeに変換して昇順ソート
+                var sortedList = clsGit.LstGitHistoryInfos
+                    .OrderBy(x => DateTime.Parse(x.DAY))
+                    .ToList();
+
+                foreach (var item in clsGit.LstGitHistoryInfos)
                 {
-                    lstHistory.Items.Add($"Commit_Id:{commit.Sha} - {commit.MessageShort},{commit.Author.Name}<{commit.Author.Email}>,Date:{commit.Author.When}, Message:{commit.Message}");
+                    listViewHistory.Items.Add(new ListViewItem(new string[]
+                    {
+                        item.CommitId,
+                        item.DAY,
+                        item.TrackingNumber,
+                        item.SubNo,
+                        item.Result
+                        
+                    }));
+                    //lstHistory.Items.Add($"Commit_Id:{item.CommitId} - {item.Result}, {item.DAY}, {item.TrackingNumber}, {item.SubNo}");
                 }
+            }
+            else
+            {
+                MessageBox.Show("コミット履歴の取得に失敗しました");
             }
         }
 
         private void btnBlobGet_Click(object sender, EventArgs e)
         {
-            if (lstHistory.SelectedItem == null)
+            if (listViewHistory.SelectedItems == null)
             {
                 MessageBox.Show("コミットを選択してください");
                 return;
@@ -112,27 +155,31 @@ namespace Git_Test
             using(var repo = new Repository(txtRipoPath.Text))
             {
                 // 選択されたコミットのSHAを取得
-                string selectedCommit = lstHistory.SelectedItem.ToString();
-                string commitSha = selectedCommit.Split('-')[0].Replace("Commit_Id:", "").Trim();
-                // コミットからBlobを取得
-                Commit commit = repo.Lookup<Commit>(commitSha);
-                if (commit != null)
+                string commitSha = listViewHistory.SelectedItems[0].Text;
+                clsGit clsGit = new clsGit();
+                clsGit.RipositoryPath = txtRipoPath.Text;
+                clsGit.CommitID = commitSha;        
+                bool flg = clsGit.RepositoryHistory_DataGet();
+                if (!flg)
                 {
-                    foreach (var entry in commit.Tree)
-                    {
-                        if (entry.TargetType == TreeEntryTargetType.Blob)
-                        {
-                            Blob blob = (Blob)entry.Target;
-                            string content = blob.GetContentText();
-                            MessageBox.Show($"ファイル名：{entry.Name} \r\nBlob Content:\n{content}");
-                        }
-                    }
+                    MessageBox.Show("Blobの取得に失敗しました");
+                    return;
                 }
-                else
-                {
-                    MessageBox.Show("選択されたコミットが見つかりません");
-                }
+                string[] strOlds = clsGit.StrOld;
+                string[] strNews = clsGit.StrNew;
+
+                textBox1.Text = strOlds[0].Replace("\n","\r\n");
+                textBox2.Text = strOlds[1].Replace("\n", "\r\n");
+                textBox3.Text = strOlds[2].Replace("\n", "\r\n");
+                textBox4.Text = strNews[0].Replace("\n", "\r\n");
+                textBox5.Text = strNews[1].Replace("\n", "\r\n");
+                textBox6.Text = strNews[2].Replace("\n", "\r\n");
             }
+        }
+
+        private void listViewHistory_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
         }
     }
 }
